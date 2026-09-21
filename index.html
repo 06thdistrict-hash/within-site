@@ -579,6 +579,7 @@
     color: rgba(18, 21, 26, .66);
   }
   .status.is-error { color: #8a2d12; font-weight: 600; }
+  .status a { text-decoration: underline; text-underline-offset: 3px; }
   .status.is-sent { color: #12402f; font-weight: 600; }
 
   /* ---------------- footer ---------------- */
@@ -857,6 +858,13 @@
     button.disabled = state === 'sending';
     statusLine.textContent = copy.status;
     statusLine.className = 'status ' + copy.cls;
+
+    if (state === 'error') {
+      var fallback = document.createElement('a');
+      fallback.href = 'mailto:withinaeteam@gmail.com?subject=Waitlist';
+      fallback.textContent = 'email us instead';
+      statusLine.append(' Or ', fallback, '.');
+    }
   }
 
   function validEmail(value) {
@@ -887,14 +895,28 @@
       })
     })
       .then(function (response) {
-        if (!response.ok) throw new Error('Request failed with status ' + response.status);
-        return response.json();
+        return response.json()
+          .catch(function () { return {}; })
+          .then(function (data) { return { ok: response.ok, status: response.status, data: data }; });
       })
-      .then(function () {
+      .then(function (result) {
+        var accepted = result.ok &&
+          String(result.data.success).toLowerCase() === 'true';
+
+        if (!accepted) {
+          throw new Error(result.data.message || ('rejected with status ' + result.status));
+        }
+
         setState('sent');
         form.reset();
       })
-      .catch(function () {
+      .catch(function (error) {
+        /* Most likely cause: the FormSubmit inbox has not been activated yet.
+           The first submission sends a confirmation link to the inbox; nothing
+           is delivered until someone clicks it. */
+        if (window.console) {
+          window.console.warn('Within waitlist submission failed:', error && error.message);
+        }
         /* the button is always live again so a retry is one click away */
         setState('error');
       });
