@@ -854,7 +854,6 @@
 
   var COPY = {
     idle:    { button: 'Join the waitlist',   status: 'One email when your emirate opens. Nothing else.', cls: '' },
-    sending: { button: 'Sending',             status: 'Adding you to the list.',                          cls: '' },
     sent:    { button: 'You are on the list', status: 'Done. Look out for one message from Within.',      cls: 'is-sent' },
     invalid: { button: 'Join the waitlist',   status: 'Enter a valid email address.',                     cls: 'is-error' }
   };
@@ -902,23 +901,50 @@
     return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
   }
 
+  /* Fire and forget. sendBeacon hands the request to the browser, which
+     delivers it in the background even if the visitor navigates away, so the
+     page never waits on FormSubmit. Neither call reads a response, so there is
+     no CORS preflight and nothing to block. */
+  function send(email) {
+    var data = new FormData();
+    data.append('email', email);
+    data.append('_subject', 'New Within waitlist signup');
+    data.append('_template', 'table');
+    data.append('_captcha', 'false');
+    data.append('source', 'within-landing-page');
+    data.append('submitted_at', new Date().toISOString());
+
+    var url = form.getAttribute('action');
+
+    if (window.navigator && navigator.sendBeacon && navigator.sendBeacon(url, data)) {
+      return;
+    }
+
+    window.fetch(url, { method: 'POST', body: data, mode: 'no-cors', keepalive: true })
+      .catch(function () { /* delivery is out of the visitor's hands either way */ });
+  }
+
   form.addEventListener('submit', function (event) {
-    if (!validEmail(input.value.trim())) {
+    var email = input.value.trim();
+
+    if (!validEmail(email)) {
       event.preventDefault();
       setState('invalid');
       input.focus();
       return;
     }
 
-    if (PREVIEW) {
-      event.preventDefault();
-      setState('sending');
-      window.setTimeout(function () { setState('sent'); form.reset(); }, 700);
-      return;
+    /* Stay on the page: confirm straight away and send in the background.
+       Without JavaScript the form still posts natively and FormSubmit returns
+       the visitor to ?joined=1, which confirms the same way. */
+    event.preventDefault();
+
+    if (!PREVIEW) {
+      send(email);
     }
 
-    /* let the browser take it from here */
-    setState('sending');
+    setState('sent');
+    form.reset();
   });
 
   input.addEventListener('input', function () {
