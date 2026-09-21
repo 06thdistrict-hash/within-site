@@ -915,18 +915,33 @@
 
     setState('sending');
 
+    /* URL-encoded rather than JSON on purpose: a JSON content type makes the
+       browser send a CORS preflight first, and a preflight that never answers
+       leaves the request hanging. Form encoding is a simple request, so the
+       POST goes straight out. The fields themselves are unchanged. */
+    var payload = new URLSearchParams();
+    payload.set('email', email);
+    payload.set('_subject', 'New Within waitlist signup');
+    payload.set('_template', 'table');
+    payload.set('_captcha', 'false');
+    payload.set('source', 'within-landing-page');
+    payload.set('submitted_at', new Date().toISOString());
+
+    /* Nothing may hang forever: give up after 12 seconds and show the error
+       state, so the button always comes back. */
+    var controller = ('AbortController' in window) ? new AbortController() : null;
+    var timeout = window.setTimeout(function () {
+      if (controller) controller.abort();
+    }, 12000);
+
     fetch(ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({
-        email: email,
-        _subject: 'New Within waitlist signup',
-        _template: 'table',
-        source: 'within-landing-page',
-        submitted_at: new Date().toISOString()
-      })
+      headers: { 'Accept': 'application/json' },
+      body: payload,
+      signal: controller ? controller.signal : undefined
     })
       .then(function (response) {
+        window.clearTimeout(timeout);
         return response.json()
           .catch(function () { return {}; })
           .then(function (data) { return { ok: response.ok, status: response.status, data: data }; });
@@ -943,6 +958,7 @@
         form.reset();
       })
       .catch(function (error) {
+        window.clearTimeout(timeout);
         /* Most likely cause: the FormSubmit inbox has not been activated yet.
            The first submission sends a confirmation link to the inbox; nothing
            is delivered until someone clicks it. */
