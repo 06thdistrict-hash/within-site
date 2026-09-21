@@ -580,6 +580,12 @@
   }
   .status.is-error { color: #8a2d12; font-weight: 600; }
   .status a { text-decoration: underline; text-underline-offset: 3px; }
+  .status .tick {
+    width: 18px;
+    height: 18px;
+    vertical-align: -4px;
+    margin-inline-end: 8px;
+  }
   .status.is-sent { color: #12402f; font-weight: 600; }
 
   /* ---------------- footer ---------------- */
@@ -858,6 +864,32 @@
     button.disabled = state === 'sending';
     statusLine.textContent = copy.status;
     statusLine.className = 'status ' + copy.cls;
+
+    if (state === 'sent') {
+      var NS = 'http://www.w3.org/2000/svg';
+      var tick = document.createElementNS(NS, 'svg');
+      tick.setAttribute('class', 'tick');
+      tick.setAttribute('viewBox', '0 0 20 20');
+      tick.setAttribute('aria-hidden', 'true');
+
+      var disc = document.createElementNS(NS, 'circle');
+      disc.setAttribute('cx', '10');
+      disc.setAttribute('cy', '10');
+      disc.setAttribute('r', '10');
+      disc.setAttribute('fill', '#1f8f70');
+
+      var check = document.createElementNS(NS, 'path');
+      check.setAttribute('d', 'M5.6 10.4 8.6 13.3 14.4 7');
+      check.setAttribute('fill', 'none');
+      check.setAttribute('stroke', '#ffffff');
+      check.setAttribute('stroke-width', '2.2');
+      check.setAttribute('stroke-linecap', 'round');
+      check.setAttribute('stroke-linejoin', 'round');
+
+      tick.appendChild(disc);
+      tick.appendChild(check);
+      statusLine.prepend(tick);
+    }
 
     if (state === 'error') {
       var fallback = document.createElement('a');
