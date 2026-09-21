@@ -814,9 +814,16 @@
       <h2>Know the total before you go.</h2>
       <p class="waitlist-sub">We open to a small group in Dubai and Abu Dhabi first. Leave your email and we will send one message when your emirate is live.</p>
 
-      <form class="form" id="waitlistForm" novalidate>
+      <form class="form" id="waitlistForm" method="POST"
+            action="https://formsubmit.co/withinaeteam@gmail.com" novalidate>
         <label class="sr-only" for="email">Email address</label>
         <input id="email" type="email" name="email" autocomplete="email" placeholder="your@email.com" required />
+        <input type="hidden" name="_subject" value="New Within waitlist signup" />
+        <input type="hidden" name="_template" value="table" />
+        <input type="hidden" name="_captcha" value="false" />
+        <input type="hidden" name="source" value="within-landing-page" />
+        <input type="hidden" name="_next" value="https://06thdistrict-hash.github.io/within-site/?joined=1" />
+        <input class="sr-only" type="text" name="_honey" tabindex="-1" autocomplete="off" aria-hidden="true" />
         <button class="btn btn-solid" type="submit" id="submitBtn">Join the waitlist</button>
       </form>
       <p class="status" id="status" role="status" aria-live="polite">One email when your emirate opens. Nothing else.</p>
@@ -838,19 +845,18 @@
 </footer>
 
 <script>
-  /* Waitlist signups are emailed to withinaeteam@gmail.com through FormSubmit.
-     FormSubmit sends a one-time activation link to that inbox on the first
-     submission; until someone clicks it, nothing is delivered. After activating,
-     swap this address for the hashed endpoint FormSubmit gives you so the inbox
-     is not sitting in the page source. */
-  var ENDPOINT = 'https://formsubmit.co/ajax/withinaeteam@gmail.com';
+  /* The form posts straight to FormSubmit the way a browser posts any form.
+     No fetch, no CORS preflight, no timeout to hang on — and it still works
+     with JavaScript switched off. FormSubmit sends the visitor back to
+     ?joined=1, which is what turns the confirmation on below. */
+
+  var PREVIEW = false;
 
   var COPY = {
-    idle:    { button: 'Join the waitlist', status: 'One email when your emirate opens. Nothing else.', cls: '' },
-    sending: { button: 'Sending',           status: 'Adding you to the list.',                          cls: '' },
-    sent:    { button: 'You are on the list', status: 'Done. Look out for one message from Within.',    cls: 'is-sent' },
-    error:   { button: 'Try again',         status: 'That did not go through. Check the address and send it again.', cls: 'is-error' },
-    invalid: { button: 'Join the waitlist', status: 'Enter a valid email address.',                     cls: 'is-error' }
+    idle:    { button: 'Join the waitlist',   status: 'One email when your emirate opens. Nothing else.', cls: '' },
+    sending: { button: 'Sending',             status: 'Adding you to the list.',                          cls: '' },
+    sent:    { button: 'You are on the list', status: 'Done. Look out for one message from Within.',      cls: 'is-sent' },
+    invalid: { button: 'Join the waitlist',   status: 'Enter a valid email address.',                     cls: 'is-error' }
   };
 
   var form = document.getElementById('waitlistForm');
@@ -890,13 +896,6 @@
       tick.appendChild(check);
       statusLine.prepend(tick);
     }
-
-    if (state === 'error') {
-      var fallback = document.createElement('a');
-      fallback.href = 'mailto:withinaeteam@gmail.com?subject=Waitlist';
-      fallback.textContent = 'email us instead';
-      statusLine.append(' Or ', fallback, '.');
-    }
   }
 
   function validEmail(value) {
@@ -904,77 +903,43 @@
   }
 
   form.addEventListener('submit', function (event) {
-    event.preventDefault();
-    var email = input.value.trim();
-
-    if (!validEmail(email)) {
+    if (!validEmail(input.value.trim())) {
+      event.preventDefault();
       setState('invalid');
       input.focus();
       return;
     }
 
+    if (PREVIEW) {
+      event.preventDefault();
+      setState('sending');
+      window.setTimeout(function () { setState('sent'); form.reset(); }, 700);
+      return;
+    }
+
+    /* let the browser take it from here */
     setState('sending');
-
-    /* URL-encoded rather than JSON on purpose: a JSON content type makes the
-       browser send a CORS preflight first, and a preflight that never answers
-       leaves the request hanging. Form encoding is a simple request, so the
-       POST goes straight out. The fields themselves are unchanged. */
-    var payload = new URLSearchParams();
-    payload.set('email', email);
-    payload.set('_subject', 'New Within waitlist signup');
-    payload.set('_template', 'table');
-    payload.set('_captcha', 'false');
-    payload.set('source', 'within-landing-page');
-    payload.set('submitted_at', new Date().toISOString());
-
-    /* Nothing may hang forever: give up after 12 seconds and show the error
-       state, so the button always comes back. */
-    var controller = ('AbortController' in window) ? new AbortController() : null;
-    var timeout = window.setTimeout(function () {
-      if (controller) controller.abort();
-    }, 12000);
-
-    fetch(ENDPOINT, {
-      method: 'POST',
-      headers: { 'Accept': 'application/json' },
-      body: payload,
-      signal: controller ? controller.signal : undefined
-    })
-      .then(function (response) {
-        window.clearTimeout(timeout);
-        return response.json()
-          .catch(function () { return {}; })
-          .then(function (data) { return { ok: response.ok, status: response.status, data: data }; });
-      })
-      .then(function (result) {
-        var accepted = result.ok &&
-          String(result.data.success).toLowerCase() === 'true';
-
-        if (!accepted) {
-          throw new Error(result.data.message || ('rejected with status ' + result.status));
-        }
-
-        setState('sent');
-        form.reset();
-      })
-      .catch(function (error) {
-        window.clearTimeout(timeout);
-        /* Most likely cause: the FormSubmit inbox has not been activated yet.
-           The first submission sends a confirmation link to the inbox; nothing
-           is delivered until someone clicks it. */
-        if (window.console) {
-          window.console.warn('Within waitlist submission failed:', error && error.message);
-        }
-        /* the button is always live again so a retry is one click away */
-        setState('error');
-      });
   });
 
   input.addEventListener('input', function () {
     if (statusLine.className.indexOf('is-error') > -1) setState('idle');
   });
 
+  /* Back from FormSubmit: confirm, then tidy the address bar so a refresh
+     does not show the confirmation again. */
+  if (/[?&]joined=1(&|$)/.test(window.location.search)) {
+    setState('sent');
+
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState({}, '', window.location.pathname + '#waitlist');
+    }
+
+    var panel = document.getElementById('waitlist');
+    if (panel && panel.scrollIntoView) panel.scrollIntoView();
+  }
+
   /* Reveal on scroll */
+
   var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var targets = document.querySelectorAll('.reveal');
 
